@@ -1,0 +1,177 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Font Lengthener</title>
+    <style>
+        body {
+            background-color: #e5e5e5;
+        }
+		.center {
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+			height: 100%;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 1.5vw;
+		}
+        .main {
+            align-items: left;
+            width: 50vw;
+            display: grid;
+            grid-template-areas: 
+                "compare"
+                "p"
+                "form"
+                "small";
+            grid-template-rows: 6vw 5vw 4vw 1vw;
+        }
+        .compare {
+            position: static;
+            grid-area: compare;
+        }
+        .compare h1 {
+            font-size: 3vw;
+        }
+        .main p {
+            grid-area: p;
+        }
+        .form {
+            grid-area: form;
+        }
+        .normal-font {
+            position: absolute;
+            z-index: 1;
+        }
+        .normal-font:hover {
+            z-index: -1;
+        }
+        .lengthened-font {
+            position: absolute;
+            z-index: 0;
+            color: #f2bd00;
+            letter-spacing: 0.05vw;
+        }
+        .lengthened-font:hover {
+            z-index: 2;
+        }
+        .small {
+            font-size: 0.8vw;
+        }
+        .small a {
+            color: #000;
+        }
+        .small a:hover {
+            color: #666;
+            text-decoration: none;
+        }
+        .form input, .form select {
+            font-size: 1.5vw;
+            padding: 0.4vw;
+        }
+        .form input[type="number"] {
+            border: 2px solid #000;
+            width: 4vw;
+        }
+        .form select {
+            border: 2px solid #000;
+            width: 6vw;
+        }
+        .form input[type="file"] {
+            padding-left: 5vw;
+            width: 30vw;
+        }
+        .form input[type="file"]::file-selector-button, .form input[type="submit"] {
+            padding: 0.4vw 1vw;
+            margin: 0 1vw;
+            background-color: #c5c5c5;
+            border-radius: 5%;
+            border: 0;
+        }
+        .form input[type="file"]::file-selector-button:hover, .form input[type="submit"]:hover {
+            background-color: #d5d5d5;
+        }
+
+    </style>
+  </head>
+  <body>
+    <div class="center">
+        <div class="main">
+            <div class="compare">
+                <div class="normal-font">
+                    <h1>Font Lengthener</h1>
+                </div>
+                <div class="lengthened-font">
+                    <h1>Font Lengthener</h1>
+                </div>
+            </div>
+            <p>Upload a font file and increase the spacing between each character.</p>
+            <div class="form">
+                <form action="font.html" method="post" enctype="multipart/form-data">
+                    <input type="number" name="increment" value="5"/>
+                    <select name="type">
+                        <option value="absolute">Units</option>
+                        <option value="percentage" selected>%</option>
+                    </select>
+                    
+                    <input type="file" name="fontfile" accept=".ttf" />
+                    <input type="submit" />
+                </form>
+            </div>
+            <div class="small">
+                <p>Inspired by <a href="https://timesnewerroman.com/">Times Newer Roman</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/pyodide/v0.22.1/full/pyodide.js"></script>
+    <script type="text/javascript">
+        // update css on input box and selector value change
+        document.querySelector('input[type="number"]').addEventListener('input', (e) => {
+            if (document.querySelector('select').value == "percentage") {
+                document.querySelector('.lengthened-font').style.letterSpacing = `${e.target.value / 100}vw`;
+            }
+        });
+
+        document.querySelector('form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            fileContents = await e.target.fontfile.files[0].arrayBuffer();
+            increment = Number(e.target.increment.value);
+            type = e.target.type.value;
+
+
+            const pyodide = await loadPyodide();
+            await pyodide.loadPackage("micropip");
+            await pyodide.pyimport("micropip").install("fonttools");
+            await pyodide.runPython(`
+                import js
+                from fontTools.ttLib import TTFont
+                
+                with open("font.ttf", "wb") as f:
+                    f.write(js.fileContents.to_bytes()) 
+                
+                font = TTFont("font.ttf")
+                for glyph_name, glyph in font["glyf"].glyphs.items():
+                    old = font["hmtx"][glyph_name]
+                    if js.type == "percentage":
+                        increment = int(old[0] * (js.increment / 100))
+                    elif js.type == "absolute":
+                        increment = int(js.increment)
+                    else:
+                        increment = 10
+                    print(f"Lengthening {glyph_name} by {increment} units")
+                    font["hmtx"][glyph_name] = (font["hmtx"][glyph_name][0] + increment, font["hmtx"][glyph_name][1] + (increment // 2))
+                font.save("font.ttf")
+
+                with open("font.ttf", "rb") as f:
+                    js.fileContents = js.Uint8Array.new(f.read())
+            `);
+
+            link = document.createElement('a');
+            link.href = URL.createObjectURL(new File([fileContents], "font.ttf", {type: "font/ttf"}));
+            link.download = "font.ttf";
+            link.click();
+        });
+    </script>
+  </body>
+</html>
